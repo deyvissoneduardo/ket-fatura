@@ -1,0 +1,9 @@
+body { font-family: sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+.container { border: 1px solid #ccc; padding: 2rem; border-radius: 8px; background: #f9f9f9; }
+input[type="file"] { margin-bottom: 1rem; }
+button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+button:hover { background: #0056b3; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+th { background-color: #f2f2f2; }
+.loading { color: orange; font-weight: bold; display: none; }

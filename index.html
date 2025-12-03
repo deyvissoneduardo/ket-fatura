@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leitor de Fatura JS</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        .container { border: 1px solid #ccc; padding: 2rem; border-radius: 8px; background: #f9f9f9; }
+        input[type="file"] { margin-bottom: 1rem; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .loading { color: orange; font-weight: bold; display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>📑 Leitor de Fatura Bancária</h1>
+        <p>Selecione o PDF da sua fatura para extrair os itens.</p>
+        
+        <input type="file" id="fileInput" accept="application/pdf" />
+        <button onclick="processPDF()">Ler Fatura</button>
+        
+        <p id="status" class="loading">Processando...</p>
+
+        <table id="resultTable">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Valor (R$)</th>
+                </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Configura o Worker do PDF.js (Necessário para processamento)
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        async function processPDF() {
+            const fileInput = document.getElementById('fileInput');
+            const status = document.getElementById('status');
+            const tbody = document.querySelector('#resultTable tbody');
+            
+            if (fileInput.files.length === 0) {
+                alert("Por favor, selecione um arquivo PDF.");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            tbody.innerHTML = ''; // Limpa tabela anterior
+            status.style.display = 'block';
+
+            reader.onload = async function () {
+                const typedarray = new Uint8Array(this.result);
+
+                try {
+                    // Carrega o documento PDF
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    let extractedItems = [];
+
+                    // Loop por todas as páginas
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        
+                        // PDF.js retorna itens de texto soltos. Vamos juntá-los para tentar formar linhas.
+                        // O join('  ') com dois espaços ajuda a separar colunas visualmente para o Regex
+                        const pageText = textContent.items.map(item => item.str).join('  ');
+                        
+                        // Processa o texto da página
+                        const items = parseTextToItems(pageText);
+                        extractedItems = extractedItems.concat(items);
+                    }
+
+                    renderTable(extractedItems);
+                    status.style.display = 'none';
+
+                } catch (error) {
+                    console.error(error);
+                    status.innerText = "Erro ao ler o PDF.";
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseTextToItems(text) {
+            const items = [];
+            
+            // --- CONFIGURAÇÃO DA EXPRESSÃO REGULAR (REGEX) ---
+            // Tenta encontrar: DATA (dd/mm) ...algum texto... VALOR (123,45)
+            // \d{2}\/\d{2} -> Procura datas como 10/12
+            // .+? -> Pega qualquer coisa no meio (descrição)
+            // \d+[\.,]\d{2} -> Pega valores como 100,00 ou 100.00
+            const regex = /(\d{2}\/\d{2})\s+(.+?)\s+(\d+[\.,]\d{2})/g;
+
+            // Dica: O texto extraído pelo PDF.js muitas vezes vem tudo em uma linha só ou quebrado estranho.
+            // Aqui estamos tentando dar match no "textão" gerado.
+            
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                // Filtro simples para evitar pegar cabeçalhos de data que não são compras
+                // (opcional, depende do banco)
+                if(match[2].length > 3) { 
+                    items.push({
+                        date: match[1],
+                        description: match[2].trim(),
+                        amount: match[3]
+                    });
+                }
+            }
+            return items;
+        }
+
+        function renderTable(items) {
+            const tbody = document.querySelector('#resultTable tbody');
+            if (items.length === 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="3" style="text-align:center">Nenhum item identificado. O layout do PDF pode ser complexo.</td>`;
+                tbody.appendChild(tr);
+                return;
+            }
+
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.date}</td>
+                    <td>${item.description}</td>
+                    <td>${item.amount}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
